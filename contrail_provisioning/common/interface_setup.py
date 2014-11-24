@@ -20,12 +20,13 @@ import json
 import subprocess
 from netaddr import IPNetwork
 from tempfile import NamedTemporaryFile
+from distutils.version import LooseVersion
 
 logging.basicConfig(format='%(asctime)-15s:: %(funcName)s:%(levelname)s::\
                             %(message)s',
                     level=logging.INFO)
 log = logging.getLogger(__name__)
-PLATFORM = platform.dist()[0]
+(PLATFORM, VERSION, EXTRA) = platform.linux_distribution()
 
 bond_opts_dict  = {'arp_interval' : 'int',
                    'arp_ip_target': 'ipaddr_list',
@@ -87,9 +88,9 @@ class BaseInterface(object):
           try:
             if (not isinstance(value, int) and value in compare_dict[key]) or\
                ('int' in compare_dict[key] and int(value)) or\
-               ('macaddr' in compare_dict[key] and self.isvalid_mac(value)) or\
+               ('macaddr' in compare_dict[key] and self.is_valid_mac(value)) or\
                ('ipaddr_list' in compare_dict[key] and
-                                 self.isvalid_ipaddr_list(value)) or\
+                                 self.is_valid_ipaddr_list(value)) or\
                ('string' in compare_dict[key] and isinstance(value,basestring)):
                 return True
           except:
@@ -128,7 +129,7 @@ class BaseInterface(object):
                                   struct.pack('256s', iface[:15]))
             macaddr = ''.join(['%02x:' % ord(each) for each in macinfo[18:24]])[:-1]
         except IOError, err:
-            log.warn('Seems there is no such interface (%s)' %iface)
+            raise Exception('Unable to fetch MAC address of interface (%s)' %iface)
         return macaddr
 
     def create_vlan_interface(self):
@@ -253,7 +254,10 @@ class UbuntuInterface(BaseInterface):
     def restart_service(self):
         '''Restart network service for Ubuntu'''
         log.info('Restarting Network Services...')
-        os.system('sudo /etc/init.d/networking restart')
+        if LooseVersion(VERSION) < LooseVersion("14.04"):
+            subprocess.call('sudo /etc/init.d/networking restart', shell=True)
+        else:
+            subprocess.call('sudo ifdown -a && sudo ifup -a', shell=True)
         time.sleep(5)
 
     def remove_lines(self, ifaces, filename):
@@ -339,7 +343,8 @@ class UbuntuInterface(BaseInterface):
         else:
             cfg = ['auto %s' %self.device,
                    'iface %s inet manual' %self.device,
-                   'hwaddress ether %s' %mac]
+                   'hwaddress ether %s' %mac,
+                   'down ip addr flush dev %s' %self.device]
         self.write_network_script(cfg)
         if self.vlan:
             self.create_vlan_interface()
@@ -382,7 +387,8 @@ class UbuntuInterface(BaseInterface):
                 cfg.append('gateway %s' %self.gw)
         else:
             cfg = ['auto %s' %self.device,
-                   'iface %s inet manual' %self.device]
+                   'iface %s inet manual' %self.device,
+                   'down ip addr flush dev %s' %self.device]
         cfg += self.bond_opts_str.split("\n")
         self.write_network_script(cfg)
         if self.vlan:

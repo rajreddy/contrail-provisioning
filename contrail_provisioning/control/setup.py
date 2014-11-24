@@ -82,14 +82,12 @@ class ControlSetup(ContrailSetup):
                          '__contrail_cert_ops__': '%s' %(certdir) if self._args.use_certs else '',
                         }
         self._template_substitute_write(dns_conf.template,
-                                        dns_template_vals, self._temp_dir_name + '/dns.conf')
-        local("sudo mv %s/dns.conf /etc/contrail/dns.conf" %(self._temp_dir_name))
-        if self.pdist == 'Ubuntu':
-            for confl in 'rndc named'.split():
-                local("".join(["sudo perl -pi -e ",
-                    "'s/(\\s*secret\\s+\").*\"\\s*;/",
-                    "\\1xvysmOR8lnUQRBcunkC6vg==\";/g;'",
-                    " /etc/contrail/dns/%s.conf" % confl]))
+                                        dns_template_vals, self._temp_dir_name + '/contrail-dns.conf')
+        local("sudo mv %s/contrail-dns.conf /etc/contrail/contrail-dns.conf" %(self._temp_dir_name))
+        for confl in 'contrail-rndc contrail-named'.split():
+            local("".join(["sed -i 's/secret \"secret123\"",
+                           ";/secret \"xvysmOR8lnUQRBcunkC6vg==\";/g'",
+                           " /etc/contrail/dns/%s.conf" % confl]))
 
     def run_services(self):
         local("sudo control-server-setup.sh")

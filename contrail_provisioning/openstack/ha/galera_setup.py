@@ -7,9 +7,12 @@ import os
 import sys
 import argparse
 import ConfigParser
+import time
 
 from fabric.api import local,run
-from fabric.context_managers import settings
+from fabric.context_managers import lcd, hide, settings
+from fabric.operations import get, put
+
 
 from contrail_provisioning.common.base import ContrailSetup
 from contrail_provisioning.openstack.ha.templates import galera_param_template
@@ -32,6 +35,7 @@ class GaleraSetup(ContrailSetup):
         if not args_str:
             args_str = ' '.join(sys.argv[1:])
         self.parse_args(args_str)
+        self.mysql_redo_log_sz = '5242880'
 
     def parse_args(self, args_str):
         '''
@@ -43,7 +47,7 @@ class GaleraSetup(ContrailSetup):
 
         parser.add_argument("--self_ip", help = "IP Address of this system")
         parser.add_argument("--keystone_ip", help = "IP Address of keystone node or Virtual IP of the cluster nodes.")
-        parser.add_argument("--openstack_index", help = "The index of this openstack node")
+        parser.add_argument("--openstack_index", help = "The index of this openstack node", type = int)
         parser.add_argument("--openstack0_user", help = "Sudo user of this openstack node")
         parser.add_argument("--openstack0_passwd", help = "Sudo user password  of this openstack node")
         parser.add_argument("--galera_ip_list", help = "List of IP Addresses of galera servers", nargs='+', type=str)
@@ -57,6 +61,8 @@ class GaleraSetup(ContrailSetup):
             local("service mysql stop")
             local("rm -rf /var/lib/mysql/grastate.dat")
             local("rm -rf /var/lib/mysql/galera.cache")
+            self.cleanup_redo_log()
+
         # fix galera_param
         template_vals = {'__mysql_host__' : self._args.self_ip,
                          '__mysql_wsrep_nodes__' :
@@ -127,7 +133,7 @@ class GaleraSetup(ContrailSetup):
                          '__wsrep_node_address__' : self._args.self_ip,
                          '__mysql_token__' : self.mysql_token,
                          '__wsrep_cluster_size__': len(self._args.galera_ip_list),
-                         '__wsrep_inc_offset__': self._args.openstack_index*10,
+                         '__wsrep_inc_offset__': self._args.openstack_index*100,
                         }
         self._template_substitute_write(wsrep_template, template_vals,
                                 self._temp_dir_name + '/%s' % wsrep_conf_file)
@@ -151,6 +157,7 @@ class GaleraSetup(ContrailSetup):
             install_db = local("service %s restart" % self.mysql_svc).failed
         if install_db:
             local('mysql_install_db --user=mysql --ldata=/var/lib/mysql')
+            self.cleanup_redo_log()
             local("service %s restart" % self.mysql_svc)
 
     def create_mysql_token_file(self):
@@ -211,6 +218,7 @@ class GaleraSetup(ContrailSetup):
         local('rm %s/galera_cron' % self._temp_dir_name)
 
     def run_services(self):
+        self.cleanup_redo_log()
         if self._args.openstack_index == 1:
             local("service %s restart" % self.mysql_svc)
         else:
@@ -228,6 +236,15 @@ class GaleraSetup(ContrailSetup):
             local("service %s restart" % self.mysql_svc)
         local("sudo update-rc.d -f mysql remove")
         local("sudo update-rc.d mysql defaults")
+
+    def cleanup_redo_log(self):
+        # Delete the default initially created redo log file
+        # This is required coz the wsrep config changes the
+        # size of redo log file
+        with settings(warn_only = True):
+            siz = local("ls -l /var/lib/mysql/ib_logfile1 | awk '{print $5}'", capture=True).strip()
+            if siz == self.mysql_redo_log_sz:
+                local("rm -rf /var/lib/mysql/ib_logfile*")
 
 def main(args_str = None):
     galera = GaleraSetup(args_str)

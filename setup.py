@@ -37,7 +37,7 @@ setup(
             # Helper scripts
             'setup-quantum-in-keystone = contrail_provisioning.config.quantum_in_keystone_setup:main',
             'storage-fs-setup = contrail_provisioning.storage.storagefs.setup:main',
-            'compute-live-migration-setup = contrail_provisioning.storage.compute.livemigration_setup:main',
+            'compute-live-migration-setup = contrail_provisioning.storage.compute.livemigration:main',
             'livemnfs-setup = contrail_provisioning.storage.storagefs.livemnfs_setup:main',
             'storage-webui-setup = contrail_provisioning.storage.webui.setup:main',
         ],
@@ -79,8 +79,10 @@ setup(
                'contrail_provisioning/openstack/scripts/contrail-cmon-monitor.sh',
                'contrail_provisioning/openstack/scripts/contrail-token-clean.sh',
                'contrail_provisioning/openstack/scripts/contrail-keystone-setup.sh',
+               'contrail_provisioning/openstack/scripts/chk_ctrldata.sh',
                # Openstack HA executables
                'contrail_provisioning/openstack/ha/scripts/contrail-ha-keystone-setup.sh',
+               'contrail_provisioning/openstack/scripts/contrail-galera-check.sh',
                # Config file rewrite executables
                'contrail_provisioning/compute/scripts/vrouter-agent.conf.sh',
                # Tools 
